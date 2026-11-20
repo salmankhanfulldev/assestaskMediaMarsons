@@ -13,6 +13,7 @@ interface DashboardState {
   activeMenu: string;
   selectedProjectId: number | null;
   isSidebarOpen: boolean;
+  darkMode: boolean;
   
   // Async states
   isLoading: boolean;
@@ -22,6 +23,7 @@ interface DashboardState {
   setActiveMenu: (menu: string) => void;
   selectProject: (projectId: number) => void;
   toggleSidebar: () => void;
+  toggleDarkMode: () => void;
   fetchInitialData: () => Promise<void>;
   addNote: (content: string) => Promise<void>;
   fetchNotesForProject: (projectId: number) => Promise<void>;
@@ -36,18 +38,19 @@ export const useStore = create<DashboardState>((set, get) => ({
   activeMenu: 'dashboard',
   selectedProjectId: null,
   isSidebarOpen: false,
+  darkMode: typeof window !== 'undefined' && window.localStorage.getItem('logica-theme') === 'dark',
   
-  isLoading: false,
+  isLoading: true,
   error: null,
 
   setActiveMenu: (menu) => set({ activeMenu: menu, isSidebarOpen: false }),
   
   selectProject: (projectId) => {
-    set({ selectedProjectId: projectId });
-    get().fetchNotesForProject(projectId);
+    set({ selectedProjectId: projectId, notes: [] });
   },
 
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
+  toggleDarkMode: () => set((state) => ({ darkMode: !state.darkMode })),
 
   fetchInitialData: async () => {
     set({ isLoading: true, error: null });
@@ -58,30 +61,24 @@ export const useStore = create<DashboardState>((set, get) => ({
         api.getLeaderboard(),
       ]);
       set({ projects, user, leaderboard, isLoading: false });
-    } catch (err: any) {
-      set({ error: err.message || 'Failed to fetch data', isLoading: false });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch data';
+      set({ error: message, isLoading: false });
     }
   },
 
   fetchNotesForProject: async (projectId: number) => {
-    try {
-      const notes = await api.getNotesByProject(projectId);
-      set({ notes });
-    } catch (err) {
-      console.error("Failed to fetch notes", err);
-    }
+    const notes = await api.getNotesByProject(projectId);
+    if (get().selectedProjectId === projectId) set({ notes });
   },
 
   addNote: async (content: string) => {
-    const { selectedProjectId, notes } = get();
+    const { selectedProjectId } = get();
     if (!selectedProjectId) return;
     
-    try {
-      const newNote = await api.addNote(selectedProjectId, content);
-      set({ notes: [...notes, newNote] });
-    } catch (err: any) {
-      set({ error: err.message || 'Failed to add note' });
-      throw err; // Re-throw to handle in component (e.g. for success message)
+    const newNote = await api.addNote(selectedProjectId, content);
+    if (get().selectedProjectId === selectedProjectId) {
+      set((state) => ({ notes: [...state.notes, newNote] }));
     }
   }
 }));
